@@ -23,7 +23,7 @@ It offers several advantages:
 
 * The transfer size can be arbitrary.
 * No address must be aligned on 8 bytes.
-* Transfers from one MRAM address to another MRAM address is possible without any intermediate cache in WRAM.
+* Transfers from one MRAM address to another MRAM address are possible without any intermediate cache in WRAM.
 
 Let us make a quick comparison:
 Suppose one has an MRAM array `output` filled with the numbers from 100 to 116:
