@@ -87,6 +87,26 @@ the transfer sizes are given in bytes.
 |          2048 |   3752 |             109 |
 
 
+### Static Versus Dynamic Cache
+
+For the table above, the cache was defined statically via `int32_t cache[2048]`.
+Curiously, changing to a dynamic definition via `int32_t *cache = mem_alloc(2048 * sizeof(int32_t))` betters the times of `mram_read` and `mram_write` but worsens the time of `memcpy`.
+The effect weakens with increased transfer size.
+
+| Transfer Size | memcpy | mram_read/write |
+| ------------- | -----: | --------------: |
+|          none |    546 |               / |
+|             8 |   3666 |            1923 |
+|            16 |   5056 |             994 |
+|            32 |   5795 |             555 |
+|            64 |   5215 |             330 |
+|           128 |   4467 |             212 |
+|           256 |   4080 |             155 |
+|           512 |   3894 |             125 |
+|          1024 |   3800 |             113 |
+|          2048 |   3752 |             109 |
+
+The reasons are currently investigated.
 
 
 ## Conclusion and Final Remarks
