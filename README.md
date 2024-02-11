@@ -1,3 +1,5 @@
+**Big changes underway concerning memcpy! Read again tomorrow evening!**
+
 # Transferring Data Between Different Memories
 
 *The code can be run using `make run`.
