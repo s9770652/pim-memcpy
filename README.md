@@ -1,5 +1,3 @@
-**Big changes underway concerning memcpy! Read again tomorrow evening!**
-
 # Transferring Data Between Different Memories
 
 *The code can be run using `make run`.
@@ -62,55 +60,52 @@ On top of that, it is now necessary to pollute the code with the `__dma_aligned`
 ## Comparing Performance
 
 At first glance, `memcpy` seems to be the better choice.
-However, it very much depends on the amount of data transferred.
-In this little test suite, 31 MiB of data are transferred from one MRAM array to another.
-The baseline is a simple for loop with element-wise, direct accesses (`output[i] = input[i]`).
-It takes a total of 2184 ms.
-When copying all data using `memcpy` without using any cache in WRAM, the time shrinks by 75% down to 546 ms.
+However, `memcpy` cannot compete with `mram_read` and `mram_write` when it comes to speed, being outperformed at any transfer size except for the smallest one—and even there it is actually slower as the following section ‘Static Versus Dynamic Cache’ is going to show.
 
-When employing `mram_read` and `mram_write`, a transfer size of 8 B yields a runtime of 2269 ms, so an even worse time than the baseline.
-Increasing the transfer size significantly improves the runtime, with 64 B leading to 373 ms, which is 83% less than the baseline and 32% less than `memcpy`.
-At the maximum transfer size of 2048 B, a runtime of just 109 ms is achieved, 95% less than the baseline and 80% less than `memcpy`.
+In this little test suite, 31 MiB of data are transferred from one MRAM array to another.
+The baseline is a simple for loop with element-wise, direct accesses (`output[i] = input[i]`), which takes a total of 2184 ms.
+Indeed, this is also the time it takes for `memcpy` to run.
+In contrast, `mram_read` and `mram_write` reach this time as well with the smallest transfer size possible but improve to just 109 ms or 95% less time with the biggest transfer size.
 
 The performance of `memcpy` cannot be improved by mimicking the behaviour of `mram_read` and `mram_write` by first writing to a WRAM cache and then to the destination in MRAM.
-Quite to the contrary, the measured times reach new heights in seemingly erratic order—which at least stay consistent between runs.
-Due to the poor documentation of this function, no speculations will be given here.
+Quite to the contrary, the measured times reach new heights in seemingly erratic order—which do not even stay fully consistent between runs.
+Due to the poor documentation of this function, no speculation will be given here.
 
 The following table contains all runtimes in mili seconds;
 the transfer sizes are given in bytes.
 
 | Transfer Size | memcpy | mram_read/write |
 | ------------- | -----: | --------------: |
-|          none |    546 |               / |
-|             8 |   2802 |            2269 |
-|            16 |   2490 |            1192 |
-|            32 |   2269 |             662 |
-|            64 |   5215 |             373 |
-|           128 |   4467 |             235 |
-|           256 |   4079 |             165 |
-|           512 |   3894 |             131 |
-|          1024 |   3800 |             114 |
-|          2048 |   3752 |             109 |
+|          none |   2185 |               / |
+|             8 |   2616 |            2185 |
+|            16 |   2407 |            1135 |
+|            32 |   2269 |             613 |
+|            64 |   2729 |             356 |
+|           128 |   2467 |             227 |
+|           256 |   4080 |             165 |
+|           512 |   2243 |             129 |
+|          1024 |   2219 |             114 |
+|          2048 |   3753 |             109 |
 
 
 ### Static Versus Dynamic Cache
 
 For the table above, the cache was allocation statically via `int32_t cache[2048]`.
 Curiously, changing to a dynamic allocation via `int32_t *cache = mem_alloc(2048 * sizeof(int32_t))` betters the times of `mram_read` and `mram_write` but worsens the time of `memcpy` with a cache.
-The effect first weakens and then disappears with increased transfer size.
+The effect first weakens and then disappears with increasing transfer size.
 
 | Transfer Size | memcpy | mram_read/write |
 | ------------- | -----: | --------------: |
-|          none |    546 |               / |
-|             8 |   3666 |            1923 |
-|            16 |   5056 |             994 |
-|            32 |   5795 |             555 |
-|            64 |   5215 |             330 |
+|          none |   2180 |               / |
+|             8 |   3565 |            1919 |
+|            16 |   5066 |             994 |
+|            32 |   5767 |             554 |
+|            64 |   5224 |             327 |
 |           128 |   4467 |             212 |
-|           256 |   4080 |             155 |
-|           512 |   3893 |             125 |
-|          1024 |   3800 |             113 |
-|          2048 |   3753 |             109 |
+|           256 |   4078 |             155 |
+|           512 |   3891 |             126 |
+|          1024 |   3796 |             113 |
+|          2048 |   3748 |             108 |
 
 #### An Attempt at an Explanation
 
@@ -172,66 +167,32 @@ At least it seams that this does not pose a problem if was not defined in the sa
 
 ### One-Way Transfers
 
-*This section was written before ‘An Attempt at an Explanation’.*
-
 What if the data is not supposed to be moved within the MRAM but to be from MRAM to WRAM and the other way around?
-`memcpy` is faster when writing to MRAM compared to reading from it, and a static or dynamic allocation of the WRAM cache changes nothing.
-For `mram_read` and `mram_write`, the picture is more complicated:
-If the cache is dynamically allocated, reading is faster than writing when transfer sizes are small, but it is the opposite when transfer sizes are big, though the lead is minuscule.
-Howeven if the cache is statically allocated, writing is always faster, though the lead melts away for bigger transfer sizes.
-The interesting part is that the type of allocation bothers only the performance of `mram_read`, not `mram_write`.
-
-Reading from MRAM (static cache):
-
-| Transfer Size | memcpy | mram_read |
-| ------------- | -----: | --------: |
-|          none |    383 |         / |
-|             8 |      / |      1404 |
-|            16 |      / |       722 |
-|            32 |      / |       393 |
-|            64 |      / |       220 |
-|           128 |      / |       132 |
-|           256 |      / |        75 |
-|           512 |      / |        62 |
-|          1024 |      / |        56 |
-|          2048 |      / |        56 |
+`memcpy` is faster when writing to MRAM compared to reading from it but overall loses to `mram_read` and `mram_write`.
+Remarkably, reading is noticeably faster than writing but just for the transfer sizes 8 B and 16 B.
+The reasons are currently investigated.
 
 Reading from MRAM (dynamic cache):
 
 | Transfer Size | memcpy | mram_read |
 | ------------- | -----: | --------: |
-|          none |    383 |         / |
+|          none |   1524 |         / |
 |             8 |      / |      1135 |
-|            16 |      / |       592 |
-|            32 |      / |       355 |
-|            64 |      / |       198 |
+|            16 |      / |       591 |
+|            32 |      / |       360 |
+|            64 |      / |       199 |
 |           128 |      / |       124 |
 |           256 |      / |        75 |
 |           512 |      / |        62 |
 |          1024 |      / |        56 |
 |          2048 |      / |        56 |
 
-Writing to MRAM (static cache):
-
-| Transfer Size | memcpy | mram_write |
-| ------------- | -----: | ---------: |
-|          none |    332 |          / |
-|             8 |      / |       1323 |
-|            16 |      / |        670 |
-|            32 |      / |        361 |
-|            64 |      / |        205 |
-|           128 |      / |        126 |
-|           256 |      / |         72 |
-|           512 |      / |         61 |
-|          1024 |      / |         55 |
-|          2048 |      / |         55 |
-
 Writing to MRAM (dynamic cache):
 
 | Transfer Size | memcpy | mram_write |
 | ------------- | -----: | ---------: |
-|          none |    331 |          / |
-|             8 |      / |       1319 |
+|          none |   1324 |          / |
+|             8 |      / |       1323 |
 |            16 |      / |        672 |
 |            32 |      / |        361 |
 |            64 |      / |        205 |
@@ -244,7 +205,7 @@ Writing to MRAM (dynamic cache):
 ## Conclusion and Final Remarks
 
 The function `memcpy` trumps `mram_read` and `mram_write` when it comes to usability as no loops, bounds checking and alignment precautions are needed.
-When it comes to speed, `memcpy` still holds the upper hand if the transfer sizes are not too big.
+But due to its slowness, `memcpy` should only be used for seldom access to small amounts of data.
 It should be noted that `mram_read` and `mram_write` were tested without much overhead.
 In some applications, sophisticated logic for checking bounds and guaranteeing alignment may raise the threshold even further.
 

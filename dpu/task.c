@@ -56,7 +56,7 @@ void functionality(int32_t *cache) {
 }
 
 void mram2mram(int32_t *cache) {
-    printf("\n\nPERFORMANCE TESTS - MRAM2MRAM (%d bytes)\n", LOAD_INTO_MRAM * sizeof(int32_t));
+    printf("\n\nPERFORMANCE TESTS - MRAM2MRAM (%zu bytes)\n", LOAD_INTO_MRAM * sizeof(int32_t));
     // Using direct accesses.
     cycles = perfcounter_get();
     for (size_t i = 0; i < LOAD_INTO_MRAM; i++) {
@@ -68,7 +68,7 @@ void mram2mram(int32_t *cache) {
 
     // Using `memcpy`.
     cycles = perfcounter_get();
-    memcpy(output, input, LOAD_INTO_MRAM);
+    memcpy(output, input, LOAD_INTO_MRAM * sizeof(int32_t));
     cycles = perfcounter_get() - cycles;
     printf("TIME (memcpy): %7.2f ms\n", (double)cycles / CLOCKS_PER_SEC * 1000);
 
@@ -100,11 +100,11 @@ void mram2mram(int32_t *cache) {
 }
 
 void mram2wram(int32_t *cache) {
-    printf("\n\nPERFORMANCE TESTS - MRAM2WRAM (%d bytes)\n", 1024 * LOAD_INTO_MRAM * sizeof(int32_t));
+    printf("\n\nPERFORMANCE TESTS - MRAM2WRAM (%zu bytes)\n", 1024 * LOAD_INTO_MRAM * sizeof(int32_t));
     // Using `memcpy`.
     cycles = perfcounter_get();
     for (int j = 0; j < 1024; j++) {
-        memcpy(cache, input, LOAD_INTO_WRAM);
+        memcpy(cache, input, LOAD_INTO_WRAM * sizeof(int32_t));
     }
     cycles = perfcounter_get() - cycles;
     printf("TIME (memcpy): %7.2f ms\n", (double)cycles / CLOCKS_PER_SEC * 1000);
@@ -125,11 +125,11 @@ void mram2wram(int32_t *cache) {
 }
 
 void wram2mram(int32_t *cache) {
-    printf("\n\nPERFORMANCE TESTS - WRAM2MRAM (%d bytes)\n", 1024 * LOAD_INTO_MRAM * sizeof(int32_t));
+    printf("\n\nPERFORMANCE TESTS - WRAM2MRAM (%zu bytes)\n", 1024 * LOAD_INTO_MRAM * sizeof(int32_t));
     // Using `memcpy`.
     cycles = perfcounter_get();
     for (int j = 0; j < 1024; j++) {
-        memcpy(output, cache, LOAD_INTO_WRAM);
+        memcpy(output, cache, LOAD_INTO_WRAM * sizeof(int32_t));
     }
     cycles = perfcounter_get() - cycles;
     printf("TIME (memcpy): %7.2f ms\n", (double)cycles / CLOCKS_PER_SEC * 1000);
