@@ -248,3 +248,4 @@ In some applications, sophisticated logic for checking bounds and guaranteeing a
 
 The little attention `memcpy` receives in the documentation may be off-putting to some.
 In fact, all of the advantages listed in ‘Using a String Function’ are purely observations and I give no guarantee for their universality.
+An acceptable middleground might be using one of the functions offered by `mram_unaligned.h`, which are at least better documented in their header file—though missing completely from the online documentation.
