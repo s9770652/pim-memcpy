@@ -151,7 +151,7 @@ void wram2mram(int32_t *cache) {
 
 int main() {
     // int32_t cache[LOAD_INTO_WRAM];
-    int32_t *cache = mem_alloc(LOAD_INTO_WRAM);
+    int32_t *cache = mem_alloc(LOAD_INTO_WRAM * sizeof(int32_t));
     perfcounter_config(COUNT_CYCLES, true);
 
     functionality(cache);

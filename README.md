@@ -1,6 +1,7 @@
 # Transferring Data Between Different Memories
 
-*Please note that some tests in `task.c` are commented out due to overflows when uncommenting everything.
+*The code can be run using `make run`.
+Please note that some tests in `task.c` are commented out due to overflows when uncommenting everything.
 Until the issue is fixed, users should compile only parts of the code.*
 
 ## The Official Way
@@ -93,9 +94,8 @@ the transfer sizes are given in bytes.
 ### Static Versus Dynamic Cache
 
 For the table above, the cache was allocation statically via `int32_t cache[2048]`.
-Curiously, changing to a dynamic allocation via `int32_t *cache = mem_alloc(2048 * sizeof(int32_t))` betters the times of `mram_read` and `mram_write` but worsens the time of `memcpy`.
+Curiously, changing to a dynamic allocation via `int32_t *cache = mem_alloc(2048 * sizeof(int32_t))` betters the times of `mram_read` and `mram_write` but worsens the time of `memcpy` with a cache.
 The effect first weakens and then disappears with increased transfer size.
-The reasons are currently investigated.
 
 | Transfer Size | memcpy | mram_read/write |
 | ------------- | -----: | --------------: |
@@ -110,8 +110,67 @@ The reasons are currently investigated.
 |          1024 |   3800 |             113 |
 |          2048 |   3753 |             109 |
 
+#### An Attempt at an Explanation
+
+In the following short program, 8126464 `int32_t` are moved from `input` to `output` in batches of 2 numbers.
+With dynamically allocated cache, the runtime is about 1.95 s, whereas it is 2.2 s with static allocation.
+```
+#include <stddef.h>
+
+#include <alloc.h>
+#include <mram.h>
+
+#define LOAD_INTO_MRAM ((1024 * 1024 * 31) / sizeof(int32_t))
+
+int32_t __mram_noinit input[LOAD_INTO_MRAM];
+int32_t __mram_noinit output[LOAD_INTO_MRAM];
+
+int main() {
+    // int32_t __dma_aligned cache[2];
+    int32_t *cache = mem_alloc(8);
+
+    for (size_t i = 0; i < LOAD_INTO_MRAM; i += 2) {
+        mram_read(&input[i], cache, 8);
+        mram_write(cache, &output[i], 8);
+    }
+}
+```
+
+In case of dynamic allocation, the compilation of the for loop is the following (`r0` holds the address of the cache, `r1` the index `i`, `r2` the address `&output[i]`, and `r3` the address `&input[i]`):
+```
+move r4, 8126462                   // LOAD_INTO_MRAM - 2
+.LBB0_1:
+	ldma r0, r3, 0                 // mram_read(&input[i], cache, 8)
+	sdma r0, r2, 0                 // mram_write(cache, &output[i], 8)
+	add r1, r1, 2                  // i += 2
+	add r2, r2, 8                  // &output[i] → &output[i+2]
+	add r3, r3, 8                  // &input[i] → &input[i+2]
+	jltu r1, r4, .LBB0_1
+```
+
+In case of static allocation, the compilation of the for loop is the following (`r0` holds the index `i`, `r1` the address `&output[i]`, and `r2` the address `&input[i]`):
+```
+.LBB0_1:
+	add r3, r22, 0                 // load address of the cache from the stack
+	ldma r3, r2, 0                 // mram_read(&input[i], cache, 8)
+	sdma r3, r1, 0                 // mram_write(cache, &output[i], 8)
+	add r0, r0, 2                  // i += 2
+	add r1, r1, 8                  // &output[i] → &output[i+2]
+	move r3, 8126462               // LOAD_INTO_MRAM - 2
+	add r2, r2, 8                  // &input[i] → &input[i+2]
+	jltu r0, r3, .LBB0_1
+```
+For some odd reason, register 3 is used both to store the address of the cache and the constant `LOAD_INTO_MRAM - 2`, which adds two additional instructions per iteration.
+The total added runtime is about `LOAD_INTO_MRAM` elements ÷ 2 elemens/iteration × 2 instructions/iteration × 11 cycles/iteration ÷ 350000000 cycles/s ≈ 250 ms, which would explain the measured time differences.
+At a transfer size of 2048 B, the time difference yielded by this calculation comes down to less than 1 ms, which gets gobbled up by random noise.
+
+I cannot say at the moment why this happens.
+At least it seams that this does not pose a problem if was not defined in the same function where the direct memory access happens as the cache address is passed through one of the registers 0 to 7 (https://sdk.upmem.com/2021.3.0/201_DPU_ABI.html).
+
 
 ### One-Way Transfers
+
+*This section was written before ‘An Attempt at an Explanation’.*
 
 What if the data is not supposed to be moved within the MRAM but to be from MRAM to WRAM and the other way around?
 `memcpy` is faster when writing to MRAM compared to reading from it, and a static or dynamic allocation of the WRAM cache changes nothing.
