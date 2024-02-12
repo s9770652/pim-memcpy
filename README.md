@@ -127,6 +127,8 @@ The `unaligned` functions stay unaffected
 
 #### An Attempt at an Explanation
 
+##### Aligned Accesses
+
 In the following short program, 8126464 `int32_t` are moved from `input` to `output` in batches of 2 numbers.
 With dynamically allocated cache, the runtime is about 1.95 s, whereas it is 2.2 s with static allocation.
 ```
@@ -183,12 +185,71 @@ I cannot say at the moment why this happens.
 At least it seams that this does not pose a problem if was not defined in the same function where the direct memory access happens as the cache address is passed through one of the registers 0 to 7 (https://sdk.upmem.com/2021.3.0/201_DPU_ABI.html).
 
 
+##### Unaligned Accesses
+
+Changing the previous code to use the `unaligned` functions reveals something interesting in the case of static allocation (`r14` holds the address `&output[i]`, `r15` the address `&input[i]`, `r17` the transfer size (which is always 8 B), and `r18` the index `i`):
+```
+.LBB0_1:
+	add r16, r22, -16              // load address of the cache from the stack
+	move r0, r15                   // load parameter &input[i]
+	move r1, r16                   // load parameter cache
+	move r2, r17                   // load parameter 8
+	call r23, mram_read_unaligned
+	move r0, r16                   // load parameter cache
+	move r1, r14                   // load parameter &output[i]
+	move r2, r17                   // load parameter 8
+	call r23, mram_write_unaligned
+	add r18, r18, 2                // i += 2
+	add r14, r14, 8                // &output[i] → &output[i+2]
+	move r0, 8126462               // LOAD_INTO_MRAM - 2
+	add r15, r15, 8                // &input[i] → &input[i+2]
+	jltu r18, r0, .LBB0_1
+```
+As before, two unnecessary loads happen each iteration and, additionally, register 17 is more or less wasted as it holds a constant.
+Also, the functions `mram_read_unaligned` and `mram_write_unaligned` do not correspond to assembler instructions and must be explicitely called.
+This requires moving the parameters into registers 0 to 2, costing further time.
+Theoretically, always loading the number 8 into register 2 is unneeded but happens anyway;
+perhaps declaring the third parameter as constant might have yholpen.
+
+While `mram_read`, `mram_write`, and `mram_write_unaligned` return nothing, `mram_read_unaligned` does:
+a pointer to the first loaded element in WRAM.
+Can this be used to gain a minor performance boost?
+Yes!
+Using
+```
+mram_write_unaligned(mram_read_unaligned(&input[i], cache, 8), &output[i], 8);
+```
+is translated to
+```
+.LBB0_1:
+	add r1, r22, -16              // load address of the cache from the stack
+	move r0, r15                  // load parameter &input[i]
+	move r2, r16                  // load parameter 8
+	call r23, mram_read_unaligned
+	move r1, r14                  // load parameter &output[i]
+	move r2, r16                  // load parameter 8
+	call r23, mram_write_unaligned
+	add r17, r17, 2               // i += 2
+	add r14, r14, 8               // &output[i] → &output[i+2]
+	move r0, 8126462              // LOAD_INTO_MRAM - 2
+	add r15, r15, 8               // &input[i] → &input[i+2]
+	jltu r17, r0, .LBB0_1
+```
+This saves not just one `move` instruction but two since the address from the stack is loaded into the correct register directly.
+Awesome!
+… Although actually measuring the runtime shows no difference at all‽
+Perhaps successive `move`s can be coalesced.
+
+Changing to dynamic allocation changes nothing from the above except for dropping the loading of the cache addres through an `add`.
+At least for the first version with `mram_read_unaligned` outside of `mram_write_unaligned`, this should result in a little boost and I am unsure again as to why there is none.
+
+
 ### One-Way Transfers
 
 What if the data is not supposed to be moved within the MRAM but to be from MRAM to WRAM or the other way around?
 `memcpy` is faster when writing to MRAM compared to reading from it but overall loses to `mram_read` and `mram_write`.
 Remarkably, aligned reading is noticeably faster than writing but just for the transfer sizes 8 B and 16 B whereas unaligned writing is always faster than unaligned reading.
-The reasons are currently investigated.
+The reasons may be investigated in the future.
 
 Reading from MRAM (dynamic cache):
 
