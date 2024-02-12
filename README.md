@@ -219,7 +219,7 @@ Using
 ```
 mram_write_unaligned(mram_read_unaligned(&input[i], cache, 8), &output[i], 8);
 ```
-is translated to
+yields
 ```
 .LBB0_1:
 	add r1, r22, -16              // load address of the cache from the stack
