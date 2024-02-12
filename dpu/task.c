@@ -1,11 +1,11 @@
 #include <stddef.h>
 #include <stdio.h>
+#include <string.h>
 
 #include <alloc.h>
 #include <mram.h>
 #include <mram_unaligned.h>
 #include <perfcounter.h>
-#include <string.h>
 
 #define LOAD_INTO_MRAM ((1024 * 1024 * 31) / sizeof(int32_t))
 #define LOAD_INTO_WRAM ((1024 * 31) / sizeof(int32_t))
