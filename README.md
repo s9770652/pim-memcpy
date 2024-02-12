@@ -235,13 +235,13 @@ yields
 	add r15, r15, 8               // &input[i] → &input[i+2]
 	jltu r17, r0, .LBB0_1
 ```
-This saves not just one `move` instruction but two since the address from the stack is loaded into the correct register directly.
+This saves not just one `move` instruction but two since the cache address from the stack is loaded into the correct register directly.
 Awesome!
 … Although actually measuring the runtime shows no difference at all‽
 Perhaps successive `move`s can be coalesced.
 
-Changing to dynamic allocation changes nothing from the above except for dropping the loading of the cache addres through an `add`.
-At least for the first version with `mram_read_unaligned` outside of `mram_write_unaligned`, this should result in a little boost and I am unsure again as to why there is none.
+Changing to dynamic allocation changes nothing from the above except for dropping the loading of the cache address through an `add`.
+At least for the first version with `mram_read_unaligned` outside of `mram_write_unaligned`, this should result in a little performance boost and I am unsure again as to why there is none.
 
 
 ### One-Way Transfers
