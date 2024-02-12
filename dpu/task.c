@@ -3,6 +3,7 @@
 
 #include <alloc.h>
 #include <mram.h>
+#include <mram_unaligned.h>
 #include <perfcounter.h>
 #include <string.h>
 
@@ -94,7 +95,20 @@ void mram2mram(int32_t *cache) {
             mram_write(cache, &output[i], block_size);
         }
         cycles = perfcounter_get() - cycles;
-        printf("TIME   (%4d): %7.2f ms\n", block_size, (double)cycles / CLOCKS_PER_SEC * 1000);
+        printf("TIME (a %4d): %7.2f ms\n", block_size, (double)cycles / CLOCKS_PER_SEC * 1000);
+    }
+    printf("\n");
+
+    // Using `mram_read_unaligned` and `mram_write_unaligned` with different transfer sizes up to the maximum of 2048.
+    for (size_t block_size = 8; block_size <= 2048; block_size <<= 1) {
+        size_t block_length = block_size / sizeof(int32_t);
+        cycles = perfcounter_get();
+        for (size_t i = 0; i < LOAD_INTO_MRAM; i += block_length) {
+            mram_read_unaligned(&input[i], cache, block_size);
+            mram_write_unaligned(cache, &output[i], block_size);
+        }
+        cycles = perfcounter_get() - cycles;
+        printf("TIME (u %4d): %7.2f ms\n", block_size, (double)cycles / CLOCKS_PER_SEC * 1000);
     }
     printf("\n");
 }
@@ -119,7 +133,21 @@ void mram2wram(int32_t *cache) {
             }
         }
         cycles = perfcounter_get() - cycles;
-        printf("TIME   (%4d): %7.2f ms\n", block_size, (double)cycles / CLOCKS_PER_SEC * 1000);
+        printf("TIME (a %4d): %7.2f ms\n", block_size, (double)cycles / CLOCKS_PER_SEC * 1000);
+    }
+    printf("\n");
+
+    // Using `mram_read_unaligned` and `mram_write_unaligned` with different transfer sizes up to the maximum of 2048.
+    for (size_t block_size = 8; block_size <= 2048; block_size <<= 1) {
+        size_t block_length = block_size / sizeof(int32_t);
+        cycles = perfcounter_get();
+        for (int j = 0; j < 1024; j++) {
+            for (size_t i = 0; i < LOAD_INTO_WRAM; i += block_length) {
+                mram_read_unaligned(&input[i], cache, block_size);
+            }
+        }
+        cycles = perfcounter_get() - cycles;
+        printf("TIME (u %4d): %7.2f ms\n", block_size, (double)cycles / CLOCKS_PER_SEC * 1000);
     }
     printf("\n");
 }
@@ -144,7 +172,21 @@ void wram2mram(int32_t *cache) {
             }
         }
         cycles = perfcounter_get() - cycles;
-        printf("TIME   (%4d): %7.2f ms\n", block_size, (double)cycles / CLOCKS_PER_SEC * 1000);
+        printf("TIME (a %4d): %7.2f ms\n", block_size, (double)cycles / CLOCKS_PER_SEC * 1000);
+    }
+    printf("\n");
+
+    // Using `mram_read_unaligned` and `mram_write_unaligned` with different transfer sizes up to the maximum of 2048.
+    for (size_t block_size = 8; block_size <= 2048; block_size <<= 1) {
+        size_t block_length = block_size / sizeof(int32_t);
+        cycles = perfcounter_get();
+        for (int j = 0; j < 1024; j++) {
+            for (size_t i = 0; i < LOAD_INTO_WRAM; i += block_length) {
+                mram_write_unaligned(&cache[i], output, block_size);
+            }
+        }
+        cycles = perfcounter_get() - cycles;
+        printf("TIME (u %4d): %7.2f ms\n", block_size, (double)cycles / CLOCKS_PER_SEC * 1000);
     }
     printf("\n");
 }

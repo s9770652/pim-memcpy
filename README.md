@@ -1,6 +1,6 @@
 # Transferring Data Between Different Memories
 
-*The code can be run using `make run`.
+*The code can be run typing `make run` in the console.
 Please note that some tests in `task.c` are commented out due to overflows when uncommenting everything.
 Until the issue is fixed, users should compile only parts of the code.*
 
@@ -20,14 +20,30 @@ Failing to follow these can lead to compilation errors but also to data being wr
 
 
 
+## Simplified Access
+
+Though not mentioned at all in the documentation, the file `mram_unaligned.h` is still part of the SDK.
+Apart from offering some functions to write atomically to single points in MRMA, it also provides the functions `mram_read_unaligned` and `mram_write_unaligned`, which come with two rules:
+
+* The transfer size must not be greater than 2048 bytes.
+
+* When writing, the WRAM address must have the same alignment as the MRAM address.
+
+The comments state that misalignments are cared for automatically at an additional cost, so that using the plain functions is preferable if misalignments can be avoided.
+
+
+
 ## Using a String Function
 
-However, there is one—barely documented—function called `memcpy(to, from, size)`, provided by `string.h`, which also serves to copy data.
-It offers several advantages:
+However, there is another barely documented function called `memcpy(to, from, size)`, provided by `string.h`, which also serves to copy data.
+My own tests suggests several advantages:
 
 * The transfer size can be arbitrary.
 * No address must be aligned on 8 bytes.
 * Transfers from one MRAM address to another MRAM address are possible without any intermediate cache in WRAM.
+
+
+### The Effects of Misalignment
 
 Let us make a quick comparison:
 Suppose one has an MRAM array `output` filled with the numbers from 100 to 116:
@@ -53,59 +69,61 @@ Instead of starting at index 1, the new numbers start at index 0!
 This is because the numbers are 4 bytes long, meaning that the address `&output[1]` is not aligned on 8 bytes.
 The very same result is given by the code `mram_write(&cache[1], output, 16 * sizeof(int32_t))` even though the new numbers starting at `1` would be expected.
 The call `mram_write(cache, &output[1], 15 * sizeof(int32_t))` does not even compile as the transfer size is not a multiple of 8.
-On top of that, it is now necessary to pollute the code with the `__dma_aligned` keyword to even attempt to handle the alignment of WRAM variables.
+On top of that, it may be necessary now to pollute the code with the `__dma_aligned` keyword to even attempt to handle the alignment of WRAM variables.
 
 
 
 ## Comparing Performance
 
-At first glance, `memcpy` seems to be the better choice.
+At first glance, `memcpy` seems to be the best choice.
 However, `memcpy` cannot compete with `mram_read` and `mram_write` when it comes to speed, being outperformed at any transfer size except for the smallest one—and even there it is actually slower as the following section ‘Static Versus Dynamic Cache’ is going to show.
 
 In this little test suite, 31 MiB of data are transferred from one MRAM array to another.
 The baseline is a simple for loop with element-wise, direct accesses (`output[i] = input[i]`), which takes a total of 2184 ms.
 Indeed, this is also the time it takes for `memcpy` to run.
-In contrast, `mram_read` and `mram_write` reach this time as well with the smallest transfer size possible but improve to just 109 ms or 95% less time with the biggest transfer size.
+In contrast, `mram_read` and `mram_write` reach this time as well with the smallest transfer size but improve to just 109 ms or 95% less time with the biggest transfer size.
+Their unaligned counterparts are exceptionally slow for small transfer sizes but almost catch up for big transfer sizes and beat `memcpy` starting somewhere between 16 B and 32 B.
 
 The performance of `memcpy` cannot be improved by mimicking the behaviour of `mram_read` and `mram_write` by first writing to a WRAM cache and then to the destination in MRAM.
 Quite to the contrary, the measured times reach new heights in seemingly erratic order—which do not even stay fully consistent between runs.
-Due to the poor documentation of this function, no speculation will be given here.
 
 The following table contains all runtimes in mili seconds;
 the transfer sizes are given in bytes.
 
-| Transfer Size | memcpy | mram_read/write |
-| ------------- | -----: | --------------: |
-|          none |   2185 |               / |
-|             8 |   2616 |            2185 |
-|            16 |   2407 |            1135 |
-|            32 |   2269 |             613 |
-|            64 |   2729 |             356 |
-|           128 |   2467 |             227 |
-|           256 |   4080 |             165 |
-|           512 |   2243 |             129 |
-|          1024 |   2219 |             114 |
-|          2048 |   3753 |             109 |
+| Transfer Size | memcpy | mram_read/write | unaligned |
+| ------------- | -----: | --------------: | --------: |
+|          none |   2185 |               / |         / |
+|             8 |   2616 |            2185 |      5295 |
+|            16 |   2407 |            1135 |      2696 |
+|            32 |   2269 |             613 |      1417 |
+|            64 |   2729 |             356 |       745 |
+|           128 |   2467 |             227 |       425 |
+|           256 |   4080 |             165 |       257 |
+|           512 |   2243 |             129 |       174 |
+|          1024 |   2219 |             114 |       134 |
+|          2048 |   3753 |             109 |       117 |
 
 
 ### Static Versus Dynamic Cache
 
-For the table above, the cache was allocation statically via `int32_t cache[2048]`.
+For the table above, the cache was allocated statically via `int32_t cache[2048]`.
 Curiously, changing to a dynamic allocation via `int32_t *cache = mem_alloc(2048 * sizeof(int32_t))` betters the times of `mram_read` and `mram_write` but worsens the time of `memcpy` with a cache.
 The effect first weakens and then disappears with increasing transfer size.
+The `unaligned` functions stay unaffected
 
-| Transfer Size | memcpy | mram_read/write |
-| ------------- | -----: | --------------: |
-|          none |   2180 |               / |
-|             8 |   3565 |            1919 |
-|            16 |   5066 |             994 |
-|            32 |   5767 |             554 |
-|            64 |   5224 |             327 |
-|           128 |   4467 |             212 |
-|           256 |   4078 |             155 |
-|           512 |   3891 |             126 |
-|          1024 |   3796 |             113 |
-|          2048 |   3748 |             108 |
+| Transfer Size | memcpy | mram_read/write | unaligned |
+| ------------- | -----: | --------------: | --------: |
+|          none |   2180 |               / |         / |
+|             8 |   3565 |            1919 |      5295 |
+|            16 |   5066 |             994 |      2697 |
+|            32 |   5767 |             554 |      1417 |
+|            64 |   5224 |             327 |       745 |
+|           128 |   4467 |             212 |       425 |
+|           256 |   4078 |             155 |       257 |
+|           512 |   3891 |             126 |       174 |
+|          1024 |   3796 |             113 |       134 |
+|          2048 |   3748 |             108 |       117 |
+
 
 #### An Attempt at an Explanation
 
@@ -167,48 +185,47 @@ At least it seams that this does not pose a problem if was not defined in the sa
 
 ### One-Way Transfers
 
-What if the data is not supposed to be moved within the MRAM but to be from MRAM to WRAM and the other way around?
+What if the data is not supposed to be moved within the MRAM but to be from MRAM to WRAM or the other way around?
 `memcpy` is faster when writing to MRAM compared to reading from it but overall loses to `mram_read` and `mram_write`.
-Remarkably, reading is noticeably faster than writing but just for the transfer sizes 8 B and 16 B.
+Remarkably, aligned reading is noticeably faster than writing but just for the transfer sizes 8 B and 16 B whereas unaligned writing is always faster than unaligned reading.
 The reasons are currently investigated.
 
 Reading from MRAM (dynamic cache):
 
-| Transfer Size | memcpy | mram_read |
-| ------------- | -----: | --------: |
-|          none |   1524 |         / |
-|             8 |      / |      1135 |
-|            16 |      / |       591 |
-|            32 |      / |       360 |
-|            64 |      / |       199 |
-|           128 |      / |       124 |
-|           256 |      / |        75 |
-|           512 |      / |        62 |
-|          1024 |      / |        56 |
-|          2048 |      / |        56 |
+| Transfer Size | memcpy | mram_read | unaligned |
+| ------------- | -----: | --------: | --------: |
+|          none |   1524 |         / |         / |
+|             8 |      / |      1135 |      2901 |
+|            16 |      / |       591 |      1495 |
+|            32 |      / |       360 |       790 |
+|            64 |      / |       199 |       399 |
+|           128 |      / |       124 |       226 |
+|           256 |      / |        75 |       136 |
+|           512 |      / |        62 |        92 |
+|          1024 |      / |        56 |        65 |
+|          2048 |      / |        56 |        60 |
 
 Writing to MRAM (dynamic cache):
 
-| Transfer Size | memcpy | mram_write |
-| ------------- | -----: | ---------: |
-|          none |   1324 |          / |
-|             8 |      / |       1323 |
-|            16 |      / |        672 |
-|            32 |      / |        361 |
-|            64 |      / |        205 |
-|           128 |      / |        126 |
-|           256 |      / |         72 |
-|           512 |      / |         61 |
-|          1024 |      / |         55 |
-|          2048 |      / |         55 |
+| Transfer Size | memcpy | mram_write | unaligned |
+| ------------- | -----: | ---------: | --------: |
+|          none |   1324 |          / |         / |
+|             8 |      / |       1323 |      2654 |
+|            16 |      / |        672 |      1366 |
+|            32 |      / |        361 |       721 |
+|            64 |      / |        205 |       396 |
+|           128 |      / |        126 |       213 |
+|           256 |      / |         72 |       129 |
+|           512 |      / |         61 |        88 |
+|          1024 |      / |         55 |        63 |
+|          2048 |      / |         55 |        58 |
 
-## Conclusion and Final Remarks
 
-The function `memcpy` trumps `mram_read` and `mram_write` when it comes to usability as no loops, bounds checking and alignment precautions are needed.
+
+## Conclusion
+
+The function `memcpy` trumps the other functions when it comes to usability as no loops, bounds checking and alignment precautions are needed.
 But due to its slowness, `memcpy` should only be used for seldom access to small amounts of data.
 It should be noted that `mram_read` and `mram_write` were tested without much overhead.
-In some applications, sophisticated logic for checking bounds and guaranteeing alignment may raise the threshold even further.
-
-The little attention `memcpy` receives in the documentation may be off-putting to some.
-In fact, all of the advantages listed in ‘Using a String Function’ are purely observations and I give no guarantee for their universality.
-An acceptable middleground might be using one of the functions offered by `mram_unaligned.h`, which are at least better documented in their header file—though missing completely from the online documentation.
+In some applications, sophisticated logic for checking bounds and guaranteeing alignment may raise the threshold even further;
+whether `mram_read_unaligned` and `mram_write_unaligned` provide a benefit in that case should be tested on a case-by-case basis.
