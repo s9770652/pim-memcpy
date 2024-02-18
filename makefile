@@ -1,6 +1,7 @@
 DPU_DIR := dpu
 HOST_DIR := host
 BUILDDIR ?= bin
+NR_TASKLETS ?= 1
 
 HOST_TARGET := ${BUILDDIR}/memcpy_host
 DPU_TARGET := ${BUILDDIR}/memcpy_dpu
@@ -13,8 +14,8 @@ DPU_SOURCES := $(wildcard ${DPU_DIR}/*.c)
 __dirs := $(shell mkdir -p ${BUILDDIR})
 
 COMMON_FLAGS := -Wall -Wextra -g
-HOST_FLAGS := ${COMMON_FLAGS} -std=c11 -O3 `dpu-pkg-config --cflags --libs dpu` -DDPU_BINARY=\"./${DPU_TARGET}\"
-DPU_FLAGS := ${COMMON_FLAGS} -O3
+HOST_FLAGS := ${COMMON_FLAGS} -std=c11 -O3 `dpu-pkg-config --cflags --libs dpu` -DNR_TASKLETS=${NR_TASKLETS} -DDPU_BINARY=\"./${DPU_TARGET}\"
+DPU_FLAGS := ${COMMON_FLAGS} -O3 -DNR_TASKLETS=${NR_TASKLETS}
 
 all: ${HOST_TARGET} ${DPU_TARGET}
 

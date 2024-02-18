@@ -31,6 +31,10 @@ Apart from offering some functions to write atomically to single points in MRMA,
 
 The comments state that misalignments are cared for automatically at an additional cost, so that using the plain functions is preferable if misalignments can be avoided.
 
+However, it seems that one cannot outright ignore alignment issues.
+I suspect that DPU faults when using `mram_write_unaligned` with multiple tasklets are caused by writing to the same area.
+Superficially, two different tasklets may write to distinct addresses but they actually do not because internally the transfer sizes get rounded up to the next multiple of eight, causing overlaps.
+
 
 
 ## Using a String Function
@@ -278,6 +282,29 @@ Writing to MRAM (dynamic cache):
 |           512 |      / |         61 |        88 |
 |          1024 |      / |         55 |        63 |
 |          2048 |      / |         55 |        58 |
+
+
+### On Using Multiple Tasklets
+
+Let us take a *quick*  look at using multiple tasklets.
+As Gómez-Luna et al. noted, the latency of (aligned) direct memory accesses can be hidden by using four or more tasklets.
+I can confirm this observation;
+using five tasklets in my benchmark still yields a tiny advantage for small transfer sizes but this, so I suspect, comes from the ununrolled loops.
+For unaligned accesses, the latency increases because of additional computations, thereby raising the threshold to seven.
+The measurements for one, two, four, eight, and eleven tasklets are as follows:
+
+| Transfer Size |                        memcpy |               mram_read/write |                      unaligned |
+| ------------- | ----------------------------: | ----------------------------: | -----------------------------: |
+|          none | 2180 → 1126 → 912 → 912 → 912 |                             / |                              / |
+|             8 |                             / | 1919 → 1052 → 948 → 947 → 948 | 5295 → 2647 → 1443 → 942 → 941 |
+|            16 |                             / |  994 →  567 → 525 → 524 → 523 | 2697 → 1324 →  748 → 523 → 523 |
+|            32 |                             / |  554 →  320 → 312 → 312 → 314 | 1417 →  691 →  396 → 313 → 315 |
+|            64 |                             / |  327 →  203 → 201 → 204 → 209 |  745 →  376 →  217 → 203 → 208 |
+|           128 |                             / |  212 →  152 → 151 → 153 → 158 |  425 →  213 →  151 → 151 → 157 |
+|           256 |                             / |  155 →  127 → 126 → 127 → 133 |  257 →  136 →  126 → 126 → 131 |
+|           512 |                             / |  126 →  114 → 114 → 114 → 119 |  174 →  114 →  114 → 114 → 119 |
+|          1024 |                             / |  113 →  108 → 108 → 108 → 113 |  134 →  108 →  108 → 108 → 113 |
+|          2048 |                             / |  108 →  108 → 108 → 108 → 110 |  117 →  108 →  108 → 108 → 110 |
 
 
 
