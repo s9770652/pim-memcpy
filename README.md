@@ -208,8 +208,6 @@ Changing the previous code to use the `unaligned` functions reveals something in
 As before, two unnecessary loads happen each iteration and, additionally, register 17 is more or less wasted as it holds a constant.
 Also, the functions `mram_read_unaligned` and `mram_write_unaligned` do not correspond to assembler instructions and must be explicitely called.
 This requires moving the parameters into registers 0 to 2, costing further time.
-Theoretically, always loading the number 8 into register 2 is unneeded but happens anyway;
-perhaps declaring the third parameter as constant might have yholpen.
 
 While `mram_read`, `mram_write`, and `mram_write_unaligned` return nothing, `mram_read_unaligned` does:
 a pointer to the first loaded element in WRAM.
